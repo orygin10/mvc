@@ -1,0 +1,40 @@
+{
+  "name": "ppm2",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rslib build",
+    "check": "biome check --write",
+    "dev": "rslib build --watch",
+    "format": "biome format --write"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@rslib/core": "^0.5.4",
+    "@types/node": "^22.8.1",
+    "typescript": "^5.8.2"
+  },
+  "private": true,
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "core-js"
+    ]
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0",
+    "@aws-sdk/credential-providers": "^3.768.0",
+    "@sqlite.org/sqlite-wasm": "3.49.1-build2"
+  }
+}
