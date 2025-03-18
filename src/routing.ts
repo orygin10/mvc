@@ -1,27 +1,3 @@
-const PLUS = location.hostname === "localhost" ? "+" : "%2B";
-
-function resolveRoute(hash: string) {
-  const parts = hash.split("/").filter(Boolean);
-
-  let folder = "/routes";
-  let subPath = "";
-  let params: Record<string, string | number> = {};
-
-  for (let i = 0; i < parts.length; i++) {
-    const segment = parts[i];
-    if (!isNaN(Number(segment))) {
-      subPath += `/[id]`;
-      params["id"] = +segment;
-      continue;
-    }
-    subPath += `/${segment}`;
-  }
-  return {
-    routePath: `${folder}${subPath}`,
-    params,
-  };
-}
-
 function pathWithParents(routePath: string) {
   const paths = [];
   let path_parts = routePath.split("/");
@@ -33,117 +9,98 @@ function pathWithParents(routePath: string) {
   return paths;
 }
 
-async function loadLayout(routePath: string) {
-  const paths = pathWithParents(routePath);
-  let bodyLoaded = false;
-  for (let i = 0; i < paths.length; i++) {
-    const layoutHtml = `${paths[i]}/${PLUS}layout.html`;
-    const response = await fetch(layoutHtml);
-    if (!response.ok) {
-      console.debug(`[ROUTING] Layout not found: ${layoutHtml}`);
-      continue;
-    }
-    const text = await response.text();
-    const html =
-      `<!-- BEGIN ${layoutHtml} -->` + text + `<!-- END ${layoutHtml} -->`;
-    if (!bodyLoaded) {
-      document.body.innerHTML = html;
-      bodyLoaded = true;
-    } else {
-      const childElement = document.querySelector("child");
-      if (!childElement) {
-        console.error("[ROUTING] Child element not found");
-        continue;
-      }
-      childElement.outerHTML = html;
-    }
-    await loadLayoutScript(paths[i]);
-    console.debug("[ROUTING] Loaded layout:", layoutHtml);
+function findClosestRelative(path: string) {
+  let paths = path.split("/").filter(Boolean).slice(0, -1);
+  let relative = document.getElementsByTagName('child').item(0);
+  if (relative) return relative;
+  while(paths.length) {
+    let currentPath = ['', ...paths, "+layout.html"].join("/");
+    paths.pop();
+    let relative = document.querySelector(`[data-path="${currentPath}"] >* div[data-path]`)
+    console.log(`Check '${currentPath}'`, relative);
+    if (relative) return relative;
   }
-  return bodyLoaded;
+  const itself = document.querySelector(`[data-path="${path}"]`)
+  if (itself) return itself;
+  relative = document.querySelector("div[data-path] >* div[data-path]");
+  if (relative) return relative;
+  relative = document.createElement('child');
+  if (document.body.children.length > 0) {
+    throw new Error("Cannot add child to non-empty body");
+  }
+  document.body.appendChild(relative);
+  return relative;
 }
 
-/**
- *
- * @param {string} routePath
- * @param {{[key: string]: string|number}} params
- * @param {Object} options
- * @param {boolean} options.layoutLoaded
- */
-async function loadPageContent(
-  routePath: string,
-  params: Record<string, string | number>,
-  { layoutLoaded }: { layoutLoaded: boolean },
-) {
-  const pageHtml = `${routePath}/${PLUS}page.html`;
-  let pageContent = await (await fetch(pageHtml)).text();
-  pageContent = pageContent.replace(
-    /\[(\w+)\]/g,
-    (_, key) => `${params[key] || ""}`,
-  );
-  pageContent =
-    `<!-- BEGIN ${pageHtml} -->` + pageContent + `<!-- END ${pageHtml} -->`;
-  if (layoutLoaded) {
-    document.querySelector("child")!.outerHTML = pageContent;
-  } else {
-    document.body.innerHTML = pageContent;
+
+const absentPaths: string[] = [];
+async function fetchHtml(path: string) {
+  if (absentPaths.includes(path)) {
+    return null;
   }
-  console.debug("[ROUTING] Loaded page content:", pageHtml);
+  const response = await fetch(path);
+  if (!response.ok) {
+    absentPaths.push(path);
+    return null;
+  }
+  const html = await response.text();
+  const fragment = document.createRange().createContextualFragment(html);
+  return fragment;
 }
 
-async function loadPageScript(
-  routePath: string,
-  params: Record<string, string | number>,
-) {
-  const pageJs = `${routePath}/${PLUS}page.js`;
-  if (!(await fetch(pageJs, { method: "HEAD" }).then((r) => r.ok))) {
-    console.debug("[ROUTING] Page script not found:", pageJs);
-    return;
+async function loadScript(path: string, params: { [key: string]: any }) {
+  if (absentPaths.includes(path)) {
+    return null;
   }
-  const mod = await import(/* webpackIgnore: true */ pageJs).catch(
-    console.warn,
-  );
-  if (!mod) {
-    console.debug("[ROUTING] Page script not found:", pageJs);
-    return;
+  const result = await fetch(path, { method: "HEAD" });
+  if (!result.ok) {
+    absentPaths.push(path);
+    return null;
   }
-  if (typeof mod.default === "function") {
-    await mod.default({ params });
-  } else {
-    console.warn("[ROUTING] No default export found in page script:", pageJs);
+  const module = await import(/* webpackIgnore: true */ window.location.origin + path)
+  if (!module.default) {
+    throw new Error(`No default export found in ${path}`);
   }
+  await module.default({ params });
 }
 
-async function loadLayoutScript(routePath: string) {
-  const layoutJs = `${routePath}/${PLUS}layout.js`;
-  const mod = await import(/* webpackIgnore: true */ layoutJs).catch(
-    console.warn,
-  );
-  if (!mod) {
-    console.debug("[ROUTING] Layout script not found:", layoutJs);
-    return;
+async function loadChild(path: string, force: boolean = false) {
+  if (!force && document.querySelector(`[data-path="${path}"]`)) {
+    return false;
   }
-  if (typeof mod.default === "function") {
-    await mod.default();
-  } else {
-    console.warn(
-      "[ROUTING] No default export found in layout script:",
-      layoutJs,
-    );
+  const fragment = await fetchHtml(path);
+  if (!fragment) {
+    return false;
   }
+  fragment.firstElementChild?.setAttribute('data-path', path);
+  let oldChild = findClosestRelative(path);
+  oldChild.replaceWith(fragment);
+  return true;
 }
 
+const BASE_PATH = '/routes';
 async function loadPage() {
-  // document.body.setAttribute("style", "display: none;");
   const hash = location.hash.slice(1) || "/";
-  const { routePath, params } = resolveRoute(hash);
-  console.debug("[ROUTING] Loading route:", routePath);
+  const paths = hash.split('/').filter(Boolean);
+  const params: { [key: string]: any } = {};
 
-  const layoutLoaded = await loadLayout(routePath);
-
-  await loadPageContent(routePath, params, { layoutLoaded });
-  await loadPageScript(routePath, params);
-  // document.body.removeAttribute("style");
+  let currentPath = BASE_PATH;
+  if (await loadChild(currentPath + "/+layout.html")) {
+    await loadScript(currentPath + "/+layout.js", params);
+  }
+  while (paths.length) {
+    const segment = paths.shift()!;
+    if (segment.match(/^\d+$/)) {
+      params.id = segment;
+    }
+    currentPath += `/${segment.replace(/^\d+$/, '[id]')}`;
+    if (await loadChild(currentPath + "/+layout.html")) {
+      await loadScript(currentPath + "/+layout.js", params);
+    }
+  }
+  if (await loadChild(currentPath + "/+page.html", true)) {
+    await loadScript(currentPath + "/+page.js", params);
+  }
 }
 
 window.addEventListener("hashchange", loadPage);

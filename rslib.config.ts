@@ -10,6 +10,7 @@ export default defineConfig({
       },
       format: 'umd',
       output: {
+        sourceMap: true,
         target: "web",
       }
     },

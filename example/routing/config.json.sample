@@ -1,0 +1,13 @@
+{
+  "aws": {
+    "region": "eu-central-1",
+    "clientId": "xxxxx",
+    "domain": "xxx.eu-central-1.amazoncognito.com",
+    "identityPoolId": "eu-central-1:xxx-xxx-xxx",
+    "userPoolId": "eu-central-1_xxxx"
+  },
+  "database": {
+    "bucket": "xxxx",
+    "key": "db.sqlite3"
+  }
+}
