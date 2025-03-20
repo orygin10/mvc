@@ -5,6 +5,8 @@ import {
 import { S3 } from "./s3";
 import { S3Client } from "@aws-sdk/client-s3";
 import { FileManager, FileManagerOptions } from "./fileManager";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { Dynamo } from "./dynamo";
 
 interface AWSServiceProperties {
   region: string;
@@ -198,6 +200,23 @@ export class AWSService {
     return new S3(client, identityId);
   }
 
+  async dynamo({ tableName }: { tableName: string }) {
+    const credentials = await this.cognitoIdentityCredentials();
+    const { identityId } = credentials;
+    const client = new DynamoDBClient({
+      credentials,
+      region: this.properties.region,
+    });
+    const userInfo = this.userInfo();
+    return new Dynamo(client, tableName, {
+      CognitoIdentityId: identityId,
+    },
+    {
+      user: userInfo["cognito:username"],
+      sub: userInfo["sub"],
+    });
+  }
+
   files({ bucket }: Pick<FileManagerOptions, "bucket">) {
     return new FileManager({ bucket, s3: () => this.s3() });
   }
@@ -223,10 +242,10 @@ export class AWSService {
 
   userInfo() {
     const idToken = sessionStorage.getItem("id_token");
-    if (idToken) {
-      return parseToken(idToken);
+    if (!idToken) {
+      throw new Error("No id token found in session storage");
     }
-    return null;
+    return parseToken(idToken);
   }
 
   private storeTokens(data: SessionParams) {

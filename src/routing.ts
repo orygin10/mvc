@@ -1,3 +1,5 @@
+const PLUS = location.hostname === "localhost" ? "+" : "%2B"
+
 function pathWithParents(routePath: string) {
   const paths = [];
   let path_parts = routePath.split("/");
@@ -16,18 +18,15 @@ function findClosestRelative(path: string) {
   while(paths.length) {
     let currentPath = ['', ...paths, "+layout.html"].join("/");
     paths.pop();
-    let relative = document.querySelector(`[data-path="${currentPath}"] >* div[data-path]`)
-    console.log(`Check '${currentPath}'`, relative);
+    let relative = document.querySelector(`[data-path="${currentPath}"] div[data-path]`)
+    // console.log(`Check '${currentPath}'`, relative);
     if (relative) return relative;
   }
   const itself = document.querySelector(`[data-path="${path}"]`)
   if (itself) return itself;
-  relative = document.querySelector("div[data-path] >* div[data-path]");
+  relative = document.querySelector("div[data-path] div[data-path]");
   if (relative) return relative;
   relative = document.createElement('child');
-  if (document.body.children.length > 0) {
-    throw new Error("Cannot add child to non-empty body");
-  }
   document.body.appendChild(relative);
   return relative;
 }
@@ -85,8 +84,8 @@ async function loadPage() {
   const params: { [key: string]: any } = {};
 
   let currentPath = BASE_PATH;
-  if (await loadChild(currentPath + "/+layout.html")) {
-    await loadScript(currentPath + "/+layout.js", params);
+  if (await loadChild(currentPath + `/${PLUS}layout.html`)) {
+    await loadScript(currentPath + `/${PLUS}layout.js`, params);
   }
   while (paths.length) {
     const segment = paths.shift()!;
@@ -94,12 +93,12 @@ async function loadPage() {
       params.id = segment;
     }
     currentPath += `/${segment.replace(/^\d+$/, '[id]')}`;
-    if (await loadChild(currentPath + "/+layout.html")) {
-      await loadScript(currentPath + "/+layout.js", params);
+    if (await loadChild(currentPath + `/${PLUS}layout.html`)) {
+      await loadScript(currentPath + `/${PLUS}layout.js`, params);
     }
   }
-  if (await loadChild(currentPath + "/+page.html", true)) {
-    await loadScript(currentPath + "/+page.js", params);
+  if (await loadChild(currentPath + `/${PLUS}page.html`, true)) {
+    await loadScript(currentPath + `/${PLUS}page.js`, params);
   }
 }
 
